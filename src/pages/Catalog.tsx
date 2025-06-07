@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -45,7 +44,7 @@ const Catalog = () => {
 
   const fetchProducts = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('products')
         .select(`
           *,
@@ -62,7 +61,7 @@ const Catalog = () => {
       setProducts(data || []);
       
       // Extract unique categories
-      const uniqueCategories = [...new Set(data?.map(p => p.category) || [])];
+      const uniqueCategories = [...new Set(data?.map((p: any) => p.category) || [])];
       setCategories(uniqueCategories);
     } catch (error) {
       console.error('Error fetching products:', error);
