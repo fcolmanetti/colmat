@@ -11,6 +11,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import Catalog from "./pages/Catalog";
+import Companies from "./pages/Companies";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
