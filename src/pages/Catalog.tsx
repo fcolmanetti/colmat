@@ -60,8 +60,8 @@ const Catalog = () => {
 
       setProducts(data || []);
       
-      // Extract unique categories
-      const uniqueCategories = [...new Set(data?.map((p: any) => p.category) || [])];
+      // Extract unique categories with proper typing
+      const uniqueCategories = [...new Set(data?.map((p: any) => p.category as string) || [])] as string[];
       setCategories(uniqueCategories);
     } catch (error) {
       console.error('Error fetching products:', error);
