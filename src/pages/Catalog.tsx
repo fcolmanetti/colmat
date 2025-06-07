@@ -1,283 +1,242 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Settings, ArrowDown } from "lucide-react";
+import { Search, Package, ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useToast } from "@/hooks/use-toast";
+
+interface Product {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  subcategory: string;
+  price: number;
+  unit: string;
+  specifications: any;
+  companies: {
+    name: string;
+    category: string;
+  };
+}
 
 const Catalog = () => {
   const navigate = useNavigate();
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("");
-  const [selectedStore, setSelectedStore] = useState("");
+  const { toast } = useToast();
+  const [products, setProducts] = useState<Product[]>([]);
+  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [categories, setCategories] = useState<string[]>([]);
 
-  // Mock data for products
-  const products = [
-    {
-      id: 1,
-      name: "Porcelanato Portinari 60x60cm",
-      store: "Cerâmica Uberaba",
-      category: "Revestimentos",
-      price: "R$ 89,90",
-      unit: "m²",
-      image: "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=300",
-      inStock: true,
-      description: "Porcelanato esmaltado, acabamento polido"
-    },
-    {
-      id: 2,
-      name: "Tinta Acrílica Premium Branca",
-      store: "Tintas Triângulo",
-      category: "Tintas",
-      price: "R$ 125,00",
-      unit: "lata 18L",
-      image: "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?w=300",
-      inStock: true,
-      description: "Tinta acrílica lavável, alta cobertura"
-    },
-    {
-      id: 3,
-      name: "Luminária Pendente LED",
-      store: "Iluminação Silva",
-      category: "Iluminação",
-      price: "R$ 245,00",
-      unit: "unidade",
-      image: "https://images.unsplash.com/photo-1524484485831-a92ffc0de03f?w=300",
-      inStock: false,
-      description: "Luminária LED com dimmer, design moderno"
-    },
-    {
-      id: 4,
-      name: "Torneira Monocomando Cromada",
-      store: "Metais & Cia",
-      category: "Metais",
-      price: "R$ 189,90",
-      unit: "unidade",
-      image: "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?w=300",
-      inStock: true,
-      description: "Torneira monocomando para cozinha"
-    },
-    {
-      id: 5,
-      name: "Piso Laminado Carvalho",
-      store: "Pisos Premium",
-      category: "Pisos",
-      price: "R$ 45,90",
-      unit: "m²",
-      image: "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=300",
-      inStock: true,
-      description: "Piso laminado AC4, espessura 8mm"
-    },
-    {
-      id: 6,
-      name: "Papel de Parede Texturizado",
-      store: "Decoração Moderna",
-      category: "Revestimentos",
-      price: "R$ 65,00",
-      unit: "rolo",
-      image: "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=300",
-      inStock: true,
-      description: "Papel de parede vinílico, lavável"
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
+  useEffect(() => {
+    filterProducts();
+  }, [products, searchTerm, selectedCategory]);
+
+  const fetchProducts = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select(`
+          *,
+          companies (
+            name,
+            category
+          )
+        `)
+        .eq('is_available', true)
+        .order('name');
+
+      if (error) throw error;
+
+      setProducts(data || []);
+      
+      // Extract unique categories
+      const uniqueCategories = [...new Set(data?.map(p => p.category) || [])];
+      setCategories(uniqueCategories);
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar o catálogo.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
 
-  const categories = ["Revestimentos", "Tintas", "Iluminação", "Metais", "Pisos"];
-  const stores = ["Cerâmica Uberaba", "Tintas Triângulo", "Iluminação Silva", "Metais & Cia", "Pisos Premium", "Decoração Moderna"];
+  const filterProducts = () => {
+    let filtered = products;
 
-  const filteredProducts = products.filter(product => {
-    const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         product.store.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = !selectedCategory || product.category === selectedCategory;
-    const matchesStore = !selectedStore || product.store === selectedStore;
-    return matchesSearch && matchesCategory && matchesStore;
-  });
+    if (searchTerm) {
+      filtered = filtered.filter(product =>
+        product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        product.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        product.companies.name.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    if (selectedCategory !== "all") {
+      filtered = filtered.filter(product => product.category === selectedCategory);
+    }
+
+    setFilteredProducts(filtered);
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+          <p className="text-gray-500">Carregando catálogo...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white/80 backdrop-blur-md border-b border-slate-200/50 sticky top-0 z-50">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
+      <div className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center py-6">
             <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate('/dashboard')}
+                className="flex items-center space-x-2"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                <span>Voltar</span>
+              </Button>
+              <div className="flex items-center space-x-3">
                 <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg flex items-center justify-center">
                   <span className="text-white font-bold text-sm">A</span>
                 </div>
-                <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent">
-                  ArquiMateriais
-                </span>
-              </div>
-              
-              <nav className="hidden md:flex space-x-6">
-                <a href="#" onClick={() => navigate('/dashboard')} className="text-slate-600 hover:text-blue-600 font-medium">Dashboard</a>
-                <a href="#" onClick={() => navigate('/projects')} className="text-slate-600 hover:text-blue-600 font-medium">Projetos</a>
-                <a href="#" className="text-blue-600 font-medium">Catálogo</a>
-                <a href="#" onClick={() => navigate('/budgets')} className="text-slate-600 hover:text-blue-600 font-medium">Orçamentos</a>
-              </nav>
-            </div>
-
-            <div className="flex items-center space-x-4">
-              <Button variant="ghost" size="icon">
-                <Settings className="h-5 w-5" />
-              </Button>
-              
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                  <span className="text-blue-600 font-semibold text-sm">JS</span>
-                </div>
-                <span className="hidden md:block text-sm font-medium text-slate-700">João Silva</span>
+                <h1 className="text-2xl font-bold text-gray-900">Catálogo de Produtos</h1>
               </div>
             </div>
           </div>
         </div>
-      </header>
+      </div>
 
-      {/* Main Content */}
-      <main className="container mx-auto px-6 py-8">
-        {/* Page Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">
-            Catálogo de Produtos
-          </h1>
-          <p className="text-slate-600 text-lg">
-            Explore produtos das melhores lojas de materiais de Uberaba
-          </p>
-        </div>
-
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Filters */}
-        <div className="bg-white rounded-lg border border-slate-200 p-6 mb-8">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
+        <div className="mb-8 space-y-4">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search className="h-4 w-4 absolute left-3 top-3 text-gray-400" />
               <Input
-                type="text"
-                placeholder="Buscar produtos..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar produtos, empresas..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
               />
             </div>
-            
-            <div>
-              <Select onValueChange={setSelectedCategory}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Categoria" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Todas as categorias</SelectItem>
-                  {categories.map(category => (
-                    <SelectItem key={category} value={category}>{category}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Select onValueChange={setSelectedStore}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Loja" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Todas as lojas</SelectItem>
-                  {stores.map(store => (
-                    <SelectItem key={store} value={store}>{store}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Select>
-                <SelectTrigger>
-                  <SelectValue placeholder="Ordenar por" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="name">Nome</SelectItem>
-                  <SelectItem value="price-low">Menor preço</SelectItem>
-                  <SelectItem value="price-high">Maior preço</SelectItem>
-                  <SelectItem value="store">Loja</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+              <SelectTrigger className="w-full sm:w-[200px]">
+                <SelectValue placeholder="Categoria" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as categorias</SelectItem>
+                {categories.map(category => (
+                  <SelectItem key={category} value={category}>{category}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-        </div>
-
-        {/* Results Counter */}
-        <div className="flex items-center justify-between mb-6">
-          <p className="text-slate-600">
-            {filteredProducts.length} produtos encontrados
-          </p>
-          <div className="flex items-center space-x-2">
-            <Button variant="outline" size="sm">
-              <ArrowDown className="h-4 w-4 mr-2" />
-              Exportar Lista
-            </Button>
+          
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-gray-600">
+              {filteredProducts.length} produto{filteredProducts.length !== 1 ? 's' : ''} encontrado{filteredProducts.length !== 1 ? 's' : ''}
+            </p>
           </div>
         </div>
 
         {/* Products Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredProducts.map((product) => (
-            <Card key={product.id} className="border-slate-200 hover:shadow-lg transition-shadow">
-              <div className="relative">
-                <img 
-                  src={product.image} 
-                  alt={product.name}
-                  className="w-full h-48 object-cover rounded-t-lg"
-                />
-                <div className="absolute top-3 right-3">
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    product.inStock 
-                      ? 'bg-green-100 text-green-800' 
-                      : 'bg-red-100 text-red-800'
-                  }`}>
-                    {product.inStock ? 'Em estoque' : 'Indisponível'}
-                  </span>
-                </div>
-              </div>
-              
-              <CardContent className="p-4">
-                <div className="mb-2">
-                  <h3 className="font-semibold text-slate-900 mb-1">{product.name}</h3>
-                  <p className="text-sm text-slate-600">{product.description}</p>
-                </div>
-                
-                <div className="mb-3">
-                  <p className="text-sm text-blue-600 font-medium">{product.store}</p>
-                  <p className="text-xs text-slate-500">{product.category}</p>
-                </div>
-                
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <p className="text-lg font-bold text-slate-900">{product.price}</p>
-                    <p className="text-xs text-slate-500">por {product.unit}</p>
+        {filteredProducts.length === 0 ? (
+          <Card>
+            <CardContent className="p-8 text-center">
+              <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum produto encontrado</h3>
+              <p className="text-gray-500">Tente ajustar os filtros de busca</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {filteredProducts.map((product) => (
+              <Card key={product.id} className="hover:shadow-lg transition-shadow">
+                <CardHeader className="pb-3">
+                  <div className="flex justify-between items-start">
+                    <Badge variant="secondary" className="mb-2">
+                      {product.category}
+                    </Badge>
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-green-600">
+                        R$ {product.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </p>
+                      <p className="text-xs text-gray-500">por {product.unit}</p>
+                    </div>
                   </div>
-                </div>
-                
-                <div className="flex space-x-2">
-                  <Button 
-                    className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
-                    disabled={!product.inStock}
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Adicionar
-                  </Button>
-                  <Button variant="outline" size="icon">
-                    <Settings className="h-4 w-4" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                  <CardTitle className="text-lg line-clamp-2">{product.name}</CardTitle>
+                  <CardDescription className="line-clamp-2">
+                    {product.description}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Fornecedor</p>
+                      <p className="text-sm text-gray-600">{product.companies.name}</p>
+                    </div>
+                    
+                    {product.subcategory && (
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">Subcategoria</p>
+                        <p className="text-sm text-gray-600">{product.subcategory}</p>
+                      </div>
+                    )}
 
-        {/* Load More */}
-        <div className="text-center mt-12">
-          <Button variant="outline" size="lg" className="px-8">
-            Carregar mais produtos
-          </Button>
-        </div>
-      </main>
+                    {product.specifications && Object.keys(product.specifications).length > 0 && (
+                      <div>
+                        <p className="text-sm font-medium text-gray-900 mb-1">Especificações</p>
+                        <div className="flex flex-wrap gap-1">
+                          {Object.entries(product.specifications).slice(0, 3).map(([key, value]) => (
+                            <Badge key={key} variant="outline" className="text-xs">
+                              {key}: {String(value)}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="pt-3 flex space-x-2">
+                      <Button size="sm" variant="outline" className="flex-1">
+                        Ver Detalhes
+                      </Button>
+                      <Button size="sm" className="flex-1">
+                        Adicionar
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
